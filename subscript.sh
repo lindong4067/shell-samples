@@ -1,0 +1,2 @@
+PRODUCT_NAME=gmpc
+#CLUSTER_NAME=cluster
