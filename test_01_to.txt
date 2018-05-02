@@ -1,0 +1,2 @@
+Consul key :  cm/values/18-gmpc-cluster/datastorages/esaconfig/hw
+Consul key :  cm/values/18-gmpc-cluster/datastorages/esaconfig/aecid

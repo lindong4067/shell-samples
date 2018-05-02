@@ -1,0 +1,2 @@
+Consul key :  cm/values/[VERSION]-[NODE_NAME]-[CLUSTER_NAME]/datastorages/esaconfig/hw
+Consul key :  cm/values/[VERSION]-[NODE_NAME]-[CLUSTER_NAME]/datastorages/esaconfig/[PRODUCT_NAME]

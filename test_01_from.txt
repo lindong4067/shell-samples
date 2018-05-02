@@ -1,0 +1,4 @@
+VERSION=18
+NODE_NAME=gmpc
+CLUSTER_NAME=cluster
+PRODUCT_NAME=aecid
