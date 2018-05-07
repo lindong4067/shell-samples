@@ -29,13 +29,18 @@ sed '/^test/'d myfile
 echo this is a test line | sed 's/\w\+/[&]/g'
 
 # 以192.168.0.1开头的行都会被替换成它自已加localhost
-sed 's/^192.168.0.1/&localhost/' file
+sed 's/^192.168.0.1/&localhost/' myfile
 
 # 子串匹配标记\1
 echo this is digit 7 in a number | sed 's/digit \([0-9]\)/\1/'
 echo aaa BBB | sed 's/\([a-z]\+\) \([A-Z]\+\)/\2 \1/'
 
 # love被标记为1，所有loveable会被替换成lovers，并打印出来：
-sed -n 's/\(love\)able/\1rs/p' file
+sed -n 's/\(love\)able/\1rs/p' myfile
 
 # 组合多表达式
+
+# 引用
+test=hello
+echo hello WORLD | sed "s/$test/HELLO"
+
