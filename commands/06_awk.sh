@@ -30,3 +30,5 @@ awk '$2 ~ /th/ {print $2,$4}' awk.test
 # 模式取反
 awk '$2 !~ /th/ {print $2,$4}' awk.test
 awk '!/th/ {print $2,$4}' awk.test
+
+
