@@ -1,0 +1,201 @@
+#!/bin/bash
+#
+# Description:  Manages a OAMCenter Server as an OCF High-Availability
+#               resource
+#
+# Authors:      Chuanwei Liu <chuanwei.liu@ericsson.com>
+#
+###############################################################################
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+RETRY=5
+CHECK_TIMEOUT=50
+COMMAND=$1
+SERVICE_NAME=MPS-OAMCenter
+oamcenter_metadata() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="MPS-OAMCenter">
+<version>1.0</version>
+<longdesc lang="en">
+A oamcenter resource
+</longdesc>
+<shortdesc lang="en">MPS-OAMCenter</shortdesc>
+<parameters>
+    <parameter name="server_ip">
+        <longdesc lang="en">
+        This is a required parameter. The ip of service.
+        </longdesc>
+        <shortdesc>the ip of service </shortdesc>
+        <content type="string" default=""/>
+    </parameter>
+    <parameter name="server_port">
+        <longdesc lang="en">
+        This is a required parameter. The port of service.
+        </longdesc>
+        <shortdesc>the port of service </shortdesc>
+        <content type="string" default=""/>
+    </parameter>
+    <parameter name="probe_uri" required="1" unique="1">
+        <longdesc lang="en">
+        This is a required parameter. The uri to detect the status of the service.
+        </longdesc>
+        <shortdesc>the uri to detect the status of the service</shortdesc>
+        <content type="string" default=""/>
+    </parameter>
+</parameters>
+<actions>
+    <action name="start" timeout="40s" />
+    <action name="stop" timeout="60s" />
+    <action name="status" timeout="30s" />
+    <action name="monitor" depth="0" timeout="60s" interval="10s" />
+    <action name="meta-data" timeout="5s" />
+    <action name="validate-all"  timeout="5s" />
+</actions>
+</resource-agent>
+END
+    return $OCF_SUCCESS
+}
+
+SERVER_IP="$OCF_RESKEY_server_ip"
+SERVER_PORT="$OCF_RESKEY_server_port"
+PROBE_URI="$OCF_RESKEY_probe_uri"
+
+OAMCENTER_START="systemctl start oamcenter.service"
+OAMCENTER_STOP="systemctl stop oamcenter.service"
+OAMCENTER_STATUS="systemctl status oamcenter.service"
+ERROR_CODE_400="\"status\":400"
+ERROR_CODE_500="\"status\":500"
+
+oamcenter_check_health(){
+    local request
+    #$request = curl -d "" https://${SERVER_IP}:${SERVER_PORT}${PROBE_URI} -k
+    #$${request} |grep -e ${ERROR_CODE_400} -e ${ERROR_CODE_500} 
+    curl --connect-timeout 10  https://${SERVER_IP}:${SERVER_PORT}${PROBE_URI} -k -s &> /tmp/MPS-OAMCenter.hacheck.output
+    cat /tmp/MPS-OAMCenter.hacheck.output | grep '"cluster":'
+}
+oamcenter_monitor() {
+    ${OAMCENTER_STATUS}|grep "active (running)"
+    if [ $? -ne 0 ]; then
+        ocf_log err "oamcenter_monitor: Resource is not running."
+        ocf_log info "oamcenter_monitor: server_ip: ${SERVER_IP}."
+        ocf_log info "oamcenter_monitor: server_port: ${SERVER_PORT}."
+        ocf_log info "oamcenter_monitor: probe_uri: ${PROBE_URI}."
+        return $OCF_NOT_RUNNING
+    fi
+    
+    if [ $# -eq 0 ]; then
+        RETRYCOUNT=$RETRY
+    else
+        RETRYCOUNT=$1
+    fi
+    
+    local rc
+    local check_cout 
+    check_cout=0
+    StartTime=`date`
+    while [ 1 ]
+    do
+        oamcenter_check_health
+        ret=$?
+        if [ $ret -eq 0 ]; then
+            break
+        fi
+        check_cout=`expr $check_cout + 1`
+        EndTime=`date`
+        TimeDiff=$(expr `date --date="${EndTime}" +%s` - `date --date="${StartTime}" +%s`)
+        ocf_log  info "oamcenter_monitor: health check failed with ${ret}, retry=${check_cout}."
+        if [ $TimeDiff -ge $CHECK_TIMEOUT ]; then
+                break
+        fi
+        if [ $check_cout -lt $RETRYCOUNT ]; then            
+            sleep 10
+        else
+            break
+        fi
+    done
+
+    case "$ret" in
+       0)
+           rc=$OCF_SUCCESS
+           ;;
+       *)
+           ocf_log  info "oamcenter_monitor: Resource has failed with ${ret}."
+           if [ -s /tmp/MPS-OAMCenter.hacheck.output ];then
+               ocf_log  info `cat /tmp/MPS-OAMCenter.hacheck.output`
+           fi
+           rc=$OCF_ERR_GENERIC 
+    esac
+
+    return $rc
+}
+oamcenter_start() {
+    ocf_log  info "oamcenter_start: Resource is going to start."
+    local rc
+    oamcenter_monitor 1
+    rc=$?
+    if [ $rc -eq $OCF_SUCCESS ];then
+        return $OCF_SUCCESS
+    fi
+    
+    if [ $rc -eq $OCF_NOT_RUNNING ];then
+        ${OAMCENTER_START}
+    fi
+ 
+    return $OCF_SUCCESS
+}
+oamcenter_stop() {
+    ocf_log  info "oamcenter_stop: Resource is going to stop."
+    
+    oamcenter_monitor 1
+    if [ $? -eq $OCF_NOT_RUNNING ];then
+        return $OCF_SUCCESS
+    else
+        ${OAMCENTER_STOP}
+    fi      
+    
+    return $OCF_SUCCESS
+}
+oamcenter_status() {
+    return $OCF_SUCCESS
+}
+
+oamcenter_validate_all() {
+    return $OCF_SUCCESS
+}
+
+run_func() {
+    local cmd="$1"
+    ocf_log debug "oamcenter: Enter $cmd"
+    $cmd
+    local status=$?
+    ocf_log debug  "oamcenter: Leave $cmd $status"
+    exit $status
+}
+
+case "$COMMAND" in
+    meta-data)
+        run_func oamcenter_metadata
+        ;;
+    start)
+        run_func oamcenter_start
+        ;;
+    stop)
+        run_func oamcenter_stop
+        ;;
+    status)
+        run_func oamcenter_status
+        ;;
+    monitor)
+        run_func oamcenter_monitor
+        ;;
+    validate-all)
+        run_func oamcenter_validate_all
+        ;;
+    *)
+        exit $OCF_ERR_ARGS
+        ;;
+esac
