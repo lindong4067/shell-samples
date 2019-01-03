@@ -11,6 +11,8 @@ function print_usage()
     echo -e "   Export all ISP information to tar file, which include system availability report and all downtime records with cause"
     echo -e "   The tar file is stored under '/export/home/mpcadmin/' and filename like 'ISPFile_XXX.zip'"
     echo -e "   Cleanup ISP data in DB"
+    echo -e "-h"
+    echo -e "   Help"
 }
 
 function print_notify()
@@ -21,12 +23,17 @@ function print_notify()
 
 function exchange_token()
 {
-    #echo -e "${1}    ${2}    ${3}    ${4}    ${5}    ${6}"
-    #token=`curl -i -m 30 -s -k -H Content-Type:application/json -X POST -d "{\"auth\":{\"method\":\"password\",\"password\":{\"user_id\":\"SysAdmin\",\"password\":\"${1}\"}}}" -D- https://${2}:${3}/v1/data/${4}_${5}_${6}/${5}/tokens | grep X-Auth-Token | awk -F':' '{ print $2 }' | tr -d '[ \t]' | head -1`
-    
-    #echo `curl -m 30 -s -k -H Content-Type:application/json -X POST -d '{"auth":{"method":"password","password":{"user_id":"SysAdmin","password":"$%Paper370"}}}' -D- https://linux-tot-49:20443/v1/data/18_gmpc_cluster/gmpc/tokens | grep -E "HTTP|X-Auth-Token"`
-    
     echo `curl -m 30 -s -k -H Content-Type:application/json -X POST -d "{\"auth\":{\"method\":\"password\",\"password\":{\"user_id\":\"SysAdmin\",\"password\":\"${1}\"}}}" -D- https://${2}:${3}/v1/data/${4}_${5}_${6}/${5}/tokens | grep -E "HTTP|X-Auth-Token"`
+}
+
+function request_url()
+{
+    echo `curl -m 30 -s -k -H Content-Type:application/json -X GET -H X-Auth-Token:${1} -D- https://${2}:${3}/v1/data/${4}_${5}_${6}/${5}/isp/${7} | grep "HTTP"`
+}
+
+function request_url_withparam()
+{
+    echo `curl -m 30 -s -k -H Content-Type:application/json -X GET -H X-Auth-Token:${1} -D- https://${2}:${3}/v1/data/${4}_${5}_${6}/${5}/isp/${7}?time=${8} | grep "HTTP"`
 }
 
 user=`whoami`
@@ -53,7 +60,7 @@ read -s pwd
 if [[ "${1}X" == "-plannedX" ]]; then
     if [[ $# -eq 2 ]]; then
         n1=`echo $2 | sed 's/[0-9]//g'`
-	if [[ ! -z $n1 ]]; then
+	if [[ ! -z ${n1} ]]; then
             echo "Param $2 is not a num, please input timestamp."
             exit 1
         fi
@@ -65,42 +72,40 @@ if [[ ! -f /var/opt/setup/site.export ]]; then
 fi
 . /var/opt/setup/site.export
 
-OAMCENTER_IP=$OAM_Center_IP
+OAMCENTER_IP=${OAM_Center_IP}
 if [[ "${OAMCENTER_IP}X" == "X" ]]; then
-    OAMCENTER_IP=$OAM_Center_Local_IP
+    OAMCENTER_IP=${OAM_Center_Local_IP}
 fi
-OAMCENTER_PORT=$OAM_Center_PORT
+OAMCENTER_PORT=${OAM_Center_PORT}
 
 header=`exchange_token $pwd $OAMCENTER_IP $OAMCENTER_PORT $VERSION $NODE_NAME $CLUSTER_NAME`
-echo "here 0"
-echo ${header}
-if [ ! -n "${header}" ]; then  
-    echo "Logon OAMCenter failed, OAMCenter not running"  
-else
-    token=`echo ${header} | grep "X-Auth-Token"`
-    echo "token=${token}"
-    if [[ ! -n "${token}" ]]; then
-        echo "here 1"
-        echo ${token}
-        exit 0
+
+if [[ ! -n "${header}" ]]; then
+    echo "Logon OAMCenter failed, OAMCenter not running"
+    exit 1
+elif [[ ${header} =~ 'HTTP/1.1 403' ]]; then
+    echo "Logon OAMCenter failed, maybe password error or unable to access database"
+    exit 1
+elif [[ ${header} =~ 'HTTP/1.1 500' ]]; then
+    echo "Server connection error"
+    exit 1
+elif [[ ${header} =~ 'X-Auth-Token' ]]; then
+    code=`echo ${header} | grep X-Auth-Token | awk -F':' '{ print $2 }' | tr -d '[ \t]' | head -1`
+    cli=${1}
+    if [[ $# -gt 1 ]]; then
+        res1=`request_url_withparam $code $OAMCENTER_IP $OAMCENTER_PORT $VERSION $NODE_NAME $CLUSTER_NAME ${cli:1} $2`
+        if [[ ${res1} =~ 'HTTP/1.1 200' ]]; then
+            echo "Command executed successfully"
+        else
+            echo "Command execution failed"
+        fi
     else
-        pwderr=`echo ${header} | grep "403"`
-        echo "pwderr=${pwderr}"
-        if [ ! -n ${pwderr} ]; then
-            echo "here 2"
-            echo "Logon OAMCenter failed, maybe password error or unable to access database"
-            exit 1
+        res2=`request_url $code $OAMCENTER_IP $OAMCENTER_PORT $VERSION $NODE_NAME $CLUSTER_NAME ${cli:1}`
+        if [[ ${res2} =~ 'HTTP/1.1 200' ]]; then
+            echo "Command executed successfully"
+        else
+            echo "Command execution failed"
         fi
-        connec=`echo ${header} | grep "500"`
-        echo "connec=${connec}" 
-        if [ ! -n "${connec}" ]; then
-            echo "here 3"
-            echo "Server connection error"
-            exit 1
-        fi
-
     fi
-fi    
+fi
 
-
-echo "finish"
