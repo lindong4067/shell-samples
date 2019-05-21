@@ -14,3 +14,11 @@ do
 print_log 
 sleep 1
 done
+
+date >> /root/datetime_cpu.txt
+top -b -n 1 | grep Cpu  >> /root/datetime_cpu.txt
+top -c -b -n 1 | grep -i  'PID USER' | grep -v 'grep' >> /root/cpu.txt
+top -c -b -n 1 | grep -i 'consul agent' | grep -v 'grep' >> /root/datetime_cpu.txt
+#cat /proc/loadavg | awk '{print $1,$2,$3}' >> /root/datetime_cpu.txt
+echo "" >> /root/datetime_cpu.txt
+
