@@ -3,7 +3,7 @@
 # Description:  Manages a OAMCenter Server as an OCF High-Availability
 #               resource
 #
-# Authors:      Chuanwei Liu <chuanwei.liu@ericsson.com>
+# Authors:      Chuanwei Liu
 #
 ###############################################################################
 
